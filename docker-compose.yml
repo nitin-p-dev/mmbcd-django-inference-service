@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mmbcd-inference-api:
     build:
@@ -15,27 +13,20 @@ services:
       - DJANGO_ALLOWED_HOSTS=*
       - DJANGO_SECRET_KEY=production-enterprise-healthcare-mammography-secret-token
       - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
     volumes:
       # Mount model weights directory (avoids baking multi-GB weights into images)
       - ./weights:/app/weights
-      # Mount persistent runtime logs
-      - ./logs:/app/logs
       # Mount DICOM test samples
       - ./test_samples:/app/test_samples
-    # NVIDIA Container Toolkit GPU Device Access
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+      # Mount persistent runtime logs
+      - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
-      interval: 30s
-      timeout: 10s
+      interval: 10s
+      timeout: 5s
       retries: 3
-      start_period: 40s
+      start_period: 30s
     logging:
       driver: "json-file"
       options:

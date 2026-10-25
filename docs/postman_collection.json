@@ -1,0 +1,208 @@
+{
+  "info": {
+    "_postman_id": "7b8e5d2a-4c91-4e89-a2e6-764831f29d10",
+    "name": "MMBCD Mammography Cancer Detection API",
+    "description": "Production Enterprise Django REST API for Multimodal Mammogram Cancer Detection (FocalNet-DINO & MMBCD) under Strict Sequential VRAM Execution (Zero-Overlap Lifecycle).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string",
+      "description": "Inference Service base URL"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Multimodal Mammogram Inference",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "dicom_file",
+              "type": "file",
+              "src": "test_samples/dicom/sample_mammogram.dcm",
+              "description": "Binary raw mammography DICOM image (.dcm)"
+            },
+            {
+              "key": "clinical_history",
+              "value": "54yo female, palpable mass in right upper outer quadrant, dense fibroglandular parenchyma.",
+              "type": "text",
+              "description": "Patient clinical history / symptoms / clinical indication narrative"
+            },
+            {
+              "key": "uhid",
+              "value": "UHID-MAMMO-2026-9081",
+              "type": "text",
+              "description": "Unique Hospital / Patient Identifier"
+            },
+            {
+              "key": "top_k",
+              "value": "5",
+              "type": "text",
+              "description": "Number of top-confidence lesion candidate crops to extract and classify (default: 5)"
+            },
+            {
+              "key": "conf_threshold",
+              "value": "0.1",
+              "type": "text",
+              "description": "Detection confidence cutoff threshold (default: 0.1)"
+            },
+            {
+              "key": "iou_threshold",
+              "value": "0.1",
+              "type": "text",
+              "description": "Detection Non-Maximum Suppression (NMS) IoU threshold (default: 0.1)"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/infer/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "infer",
+            ""
+          ]
+        },
+        "description": "Performs two-phase multimodal deep learning inference:\n1. DICOM preprocessing (VOI LUT windowing, tissue contour crop, normalization).\n2. Phase 1 (FocalNet-DINO): Detects candidate lesion ROIs -> Complete VRAM flush.\n3. Phase 2 (MMBCD): Cross-attends top-K ROI crops with clinical text -> Complete VRAM flush.\n4. Returns comprehensive clinical diagnosis, ROI bounding boxes, probabilities, latency profile, and memory telemetry."
+      },
+      "response": [
+        {
+          "name": "200 OK - Successful Live Inference Output",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "dicom_file",
+                  "type": "file",
+                  "src": "test_samples/dicom/sample_mammogram.dcm"
+                },
+                {
+                  "key": "clinical_history",
+                  "value": "54yo female, palpable mass in right upper outer quadrant, dense fibroglandular parenchyma.",
+                  "type": "text"
+                },
+                {
+                  "key": "uhid",
+                  "value": "UHID-MAMMO-2026-9081",
+                  "type": "text"
+                },
+                {
+                  "key": "top_k",
+                  "value": "5",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/infer/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "infer",
+                ""
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"trace_id\": \"f827f06b-34c9-47c6-8b55-72da7b9c5c76\",\n  \"patient_metadata\": {\n    \"patient_id\": \"UHID-MAMMO-2026-9081\",\n    \"patient_age\": \"054Y\",\n    \"patient_sex\": \"F\",\n    \"study_instance_uid\": \"1.2.826.0.1.3680043.8.498.77769958612336646366493786810296960474\",\n    \"series_instance_uid\": \"1.2.826.0.1.3680043.8.498.38219007522918208655478147593003530860\",\n    \"sop_instance_uid\": \"1.2.826.0.1.3680043.8.498.64147302072961744003826919047647210559\",\n    \"modality\": \"MG\",\n    \"laterality\": \"R\",\n    \"view_position\": \"MLO\",\n    \"body_part_examined\": \"BREAST\",\n    \"manufacturer\": \"EnterpriseMed Imaging Systems\",\n    \"photometric_interpretation\": \"MONOCHROME2\",\n    \"rows\": 1024,\n    \"columns\": 800,\n    \"bits_stored\": 12,\n    \"uhid\": \"UHID-MAMMO-2026-9081\",\n    \"clinical_indication\": \"54yo female, palpable mass in right upper outer quadrant, dense fibroglandular parenchyma.\"\n  },\n  \"detection\": {\n    \"rois_detected\": [\n      {\n        \"bbox_normalized\": {\n          \"cx\": 0.46434,\n          \"cy\": 0.49953,\n          \"w\": 0.51026,\n          \"h\": 0.50423\n        },\n        \"bbox_pixel\": {\n          \"x1\": 145,\n          \"y1\": 249,\n          \"x2\": 499,\n          \"y2\": 757\n        },\n        \"confidence\": 0.5398,\n        \"class_id\": 1,\n        \"label\": \"suspect_lesion\"\n      },\n      {\n        \"bbox_normalized\": {\n          \"cx\": 0.46434,\n          \"cy\": 0.49953,\n          \"w\": 0.51026,\n          \"h\": 0.50423\n        },\n        \"bbox_pixel\": {\n          \"x1\": 145,\n          \"y1\": 249,\n          \"x2\": 499,\n          \"y2\": 757\n        },\n        \"confidence\": 0.5398,\n        \"class_id\": 1,\n        \"label\": \"suspect_lesion\"\n      },\n      {\n        \"bbox_normalized\": {\n          \"cx\": 0.46434,\n          \"cy\": 0.49953,\n          \"w\": 0.51026,\n          \"h\": 0.50423\n        },\n        \"bbox_pixel\": {\n          \"x1\": 145,\n          \"y1\": 249,\n          \"x2\": 499,\n          \"y2\": 757\n        },\n        \"confidence\": 0.5398,\n        \"class_id\": 1,\n        \"label\": \"suspect_lesion\"\n      },\n      {\n        \"bbox_normalized\": {\n          \"cx\": 0.46434,\n          \"cy\": 0.49953,\n          \"w\": 0.51026,\n          \"h\": 0.50423\n        },\n        \"bbox_pixel\": {\n          \"x1\": 145,\n          \"y1\": 249,\n          \"x2\": 499,\n          \"y2\": 757\n        },\n        \"confidence\": 0.5398,\n        \"class_id\": 1,\n        \"label\": \"suspect_lesion\"\n      },\n      {\n        \"bbox_normalized\": {\n          \"cx\": 0.46434,\n          \"cy\": 0.49953,\n          \"w\": 0.51026,\n          \"h\": 0.50423\n        },\n        \"bbox_pixel\": {\n          \"x1\": 145,\n          \"y1\": 249,\n          \"x2\": 499,\n          \"y2\": 757\n        },\n        \"confidence\": 0.5398,\n        \"class_id\": 1,\n        \"label\": \"suspect_lesion\"\n      }\n    ],\n    \"total_candidates_found\": 20,\n    \"rois_evaluated\": 5,\n    \"inference_time_ms\": 7.8\n  },\n  \"classification\": {\n    \"prediction\": \"Benign\",\n    \"predicted_class\": 0,\n    \"confidence\": 0.5059,\n    \"malignancy_probability\": 0.4941,\n    \"benign_probability\": 0.5059,\n    \"cross_attention_weights\": [\n      0.2,\n      0.2,\n      0.2,\n      0.2,\n      0.2\n    ],\n    \"inference_time_ms\": 38.48\n  },\n  \"timing_metrics_ms\": {\n    \"dicom_preprocessing_ms\": 46.18,\n    \"focalnet_detection_ms\": 140.99,\n    \"roi_cropping_ms\": 0.6,\n    \"mmbcd_classification_ms\": 3245.51,\n    \"total_pipeline_ms\": 3435.15\n  },\n  \"memory_metrics\": {\n    \"baseline_pre_inference\": {\n      \"device\": \"cpu\",\n      \"is_cuda\": false,\n      \"active_model\": null,\n      \"process_rss_mb\": 734.78,\n      \"process_vms_mb\": 9583.47,\n      \"system_ram_pct\": 11.7\n    },\n    \"post_phase1_cleanup\": {\n      \"device\": \"cpu\",\n      \"is_cuda\": false,\n      \"active_model\": null,\n      \"process_rss_mb\": 755.37,\n      \"process_vms_mb\": 9592.22,\n      \"system_ram_pct\": 11.8\n    },\n    \"post_phase2_cleanup\": {\n      \"device\": \"cpu\",\n      \"is_cuda\": false,\n      \"active_model\": null,\n      \"process_rss_mb\": 813.3,\n      \"process_vms_mb\": 11102.01,\n      \"system_ram_pct\": 12.5\n    }\n  },\n  \"errors_or_warnings\": []\n}"
+        }
+      ]
+    },
+    {
+      "name": "2. Health & VRAM Telemetry Probe",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/health/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "health",
+            ""
+          ]
+        },
+        "description": "Liveness & readiness health check endpoint for Docker/Kubernetes container orchestration probes. Inspects current hardware acceleration device, CUDA availability, active model locked in VRAM (guaranteed null when idle), and system memory telemetry."
+      },
+      "response": [
+        {
+          "name": "200 OK - Healthy & Idle VRAM State",
+          "originalRequest": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/health/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health",
+                ""
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"status\": \"HEALTHY\",\n  \"service\": \"MMBCD Mammography Inference Service\",\n  \"version\": \"1.0.0\",\n  \"device\": \"cpu\",\n  \"cuda_available\": false,\n  \"active_model_in_vram\": null,\n  \"memory_telemetry\": {\n    \"device\": \"cpu\",\n    \"is_cuda\": false,\n    \"active_model\": null,\n    \"process_rss_mb\": 692.31,\n    \"process_vms_mb\": 7315.8,\n    \"system_ram_pct\": 10.8\n  }\n}"
+        }
+      ]
+    }
+  ]
+}

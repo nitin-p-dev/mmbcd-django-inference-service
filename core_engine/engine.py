@@ -68,15 +68,32 @@ class MedicalInferenceEngine:
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
 
-        # Autodetect weights paths if relative paths provided
+        # Autodetect weights paths from Django settings or default repository structure
         base_dir = Path(__file__).resolve().parent.parent
+        django_focalnet_ckpt = None
+        django_focalnet_cfg = None
+        django_mmbcd_ckpt = None
+        try:
+            from django.conf import settings
+            django_focalnet_ckpt = getattr(settings, "FOCALNET_CHECKPOINT_PATH", None)
+            django_focalnet_cfg = getattr(settings, "FOCALNET_CONFIG_PATH", None)
+            django_mmbcd_ckpt = getattr(settings, "MMBCD_CHECKPOINT_PATH", None)
+        except Exception:
+            pass
+
         self.focalnet_weights = (
             focalnet_weights_path
-            or str(base_dir / "weights" / "focalnet" / "focalnet_dino_best.pth")
+            or django_focalnet_ckpt
+            or str(base_dir / "weights" / "focalnet" / "checkpoint0031.pth")
         )
-        self.focalnet_config = focalnet_config_path
+        self.focalnet_config = (
+            focalnet_config_path
+            or django_focalnet_cfg
+            or str(base_dir / "weights" / "focalnet" / "config_cfg.py")
+        )
         self.mmbcd_weights = (
             mmbcd_weights_path
+            or django_mmbcd_ckpt
             or str(base_dir / "weights" / "mmbcd" / "mmbcd_best.pth")
         )
         self.roberta_checkpoint = roberta_checkpoint_path

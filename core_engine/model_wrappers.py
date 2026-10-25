@@ -124,6 +124,24 @@ def apply_nms(
 
 
 # ============================================================================
+# Checkpoint and Configuration Defaults
+# ============================================================================
+
+try:
+    from django.conf import settings
+    _BASE_DIR = getattr(settings, "BASE_DIR", Path(__file__).resolve().parent.parent)
+except Exception:
+    _BASE_DIR = Path(__file__).resolve().parent.parent
+
+FOCALNET_CHECKPOINT_PATH = os.path.join(
+    _BASE_DIR, "weights", "focalnet", "checkpoint0031.pth"
+)
+FOCALNET_CONFIG_PATH = os.path.join(
+    _BASE_DIR, "weights", "focalnet", "config_cfg.py"
+)
+
+
+# ============================================================================
 # FocalNet-DINO Model Wrapper (Model 1)
 # ============================================================================
 
@@ -142,12 +160,14 @@ class FocalNetDINOWrapper(BaseInferenceModel):
         iou_threshold: float = 0.1,
         top_k: int = 5,
     ) -> None:
+        resolved_checkpoint = checkpoint_path or FOCALNET_CHECKPOINT_PATH
+        resolved_config = config_path or FOCALNET_CONFIG_PATH
         super().__init__(
             model_name=ModelType.FOCALNET_DINO,
-            checkpoint_path=checkpoint_path,
+            checkpoint_path=resolved_checkpoint,
             backend=backend,
         )
-        self.config_path = config_path
+        self.config_path = resolved_config
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
         self.top_k = top_k
@@ -155,14 +175,16 @@ class FocalNetDINOWrapper(BaseInferenceModel):
 
     def load(self, device: torch.device) -> None:
         """
-        Instantiates FocalNet-DINO network and mounts onto target device.
+        Instantiates FocalNet-DINO network and loads state_dict onto target device
+        with map_location=device and sets .eval() mode strictly.
         """
         logger.info(f"Loading FocalNet-DINO on {device} (Backend: {self.backend.value})...")
         self._device = device
 
         has_weights = self.checkpoint_path and Path(self.checkpoint_path).is_file()
+        has_config = self.config_path and Path(self.config_path).is_file()
 
-        if has_weights:
+        if has_weights and has_config:
             try:
                 # Add FocalNet-DINO directory to path
                 repo_path = Path(__file__).resolve().parent.parent / "external" / "FocalNet-DINO"
@@ -172,27 +194,38 @@ class FocalNetDINOWrapper(BaseInferenceModel):
                 from main import build_model_main
                 from util.slconfig import SLConfig
 
-                cfg = SLConfig.fromfile(self.config_path or str(repo_path / "config" / "DINO" / "DINO_4scale.py"))
+                logger.info(f"Building FocalNet-DINO from config: {self.config_path}")
+                cfg = SLConfig.fromfile(str(self.config_path))
                 cfg.device = str(device)
                 model, _, _ = build_model_main(cfg)
 
-                checkpoint = torch.load(self.checkpoint_path, map_location=device)
-                model.load_state_dict(checkpoint["model"], strict=False)
+                logger.info(f"Loading state_dict from {self.checkpoint_path} with map_location={device}...")
+                checkpoint = torch.load(self.checkpoint_path, map_location=device, weights_only=False)
+                state_dict = checkpoint["model"] if isinstance(checkpoint, dict) and "model" in checkpoint else checkpoint
+                model.load_state_dict(state_dict, strict=False)
+
+                # Mount strictly onto target device and set eval mode
                 model.to(device)
                 model.eval()
+                for param in model.parameters():
+                    param.requires_grad = False
+
                 self.model = model
                 self._is_loaded = True
-                logger.info(f"FocalNet-DINO loaded from weights: {self.checkpoint_path}")
+                logger.info(f"FocalNet-DINO checkpoint loaded onto {device} strictly in eval mode: {self.checkpoint_path}")
                 return
             except Exception as e:
-                logger.warning(
-                    f"FocalNet-DINO checkpoint load encountered issue: {e}. Falling back to initialized model."
+                logger.error(
+                    f"FocalNet-DINO checkpoint load encountered issue: {e}. Falling back to initialized model.",
+                    exc_info=True,
                 )
 
         # Fallback / Lightweight initialized model when full checkpoint is not present
-        logger.info("Initializing FocalNet-DINO detector instance...")
+        logger.info("Initializing fallback FocalNet-DINO detector instance...")
         self.model = self._create_detector_stub().to(device)
         self.model.eval()
+        for param in self.model.parameters():
+            param.requires_grad = False
         self._is_loaded = True
 
     def _create_detector_stub(self) -> nn.Module:
@@ -256,13 +289,71 @@ class FocalNetDINOWrapper(BaseInferenceModel):
             # Parse outputs into standard BBoxProposal list
             proposals: List[BBoxProposal] = []
 
-            if isinstance(outputs, torch.Tensor):
-                # Shape: [1, N, 5] with (cx, cy, w, h, score)
+            # 1. Real FocalNet-DINO output format (dict with 'pred_logits' and 'pred_boxes')
+            if isinstance(outputs, dict):
+                pred_logits = outputs.get("pred_logits")
+                pred_boxes = outputs.get("pred_boxes")
+
+                if pred_logits is not None and pred_boxes is not None:
+                    # pred_logits: [B, num_queries, num_classes] (e.g. [1, 900, 1])
+                    # pred_boxes: [B, num_queries, 4] in (cx, cy, w, h)
+                    scores = torch.sigmoid(pred_logits[0]).max(dim=-1).values.cpu().numpy()
+                    boxes = pred_boxes[0].cpu().numpy()
+
+                    for query_idx in range(len(scores)):
+                        score = float(scores[query_idx])
+                        if score >= c_thresh:
+                            cx, cy, w, h = [float(v) for v in boxes[query_idx]]
+                            cx = max(0.0, min(1.0, cx))
+                            cy = max(0.0, min(1.0, cy))
+                            w = max(0.01, min(1.0, w))
+                            h = max(0.01, min(1.0, h))
+
+                            x1 = max(0, int((cx - w / 2.0) * img_w))
+                            y1 = max(0, int((cy - h / 2.0) * img_h))
+                            x2 = min(img_w, int((cx + w / 2.0) * img_w))
+                            y2 = min(img_h, int((cy + h / 2.0) * img_h))
+
+                            proposals.append(
+                                BBoxProposal(
+                                    cx=cx, cy=cy, w=w, h=h,
+                                    confidence=score,
+                                    class_id=1,
+                                    label="suspect_lesion",
+                                    x1=x1, y1=y1, x2=x2, y2=y2,
+                                )
+                            )
+
+                    # If no proposals exceeded c_thresh, pick top highest scoring queries
+                    if not proposals and len(scores) > 0:
+                        top_indices = np.argsort(scores)[::-1][:k]
+                        for idx in top_indices:
+                            score = float(scores[idx])
+                            cx, cy, w, h = [float(v) for v in boxes[idx]]
+                            cx = max(0.0, min(1.0, cx))
+                            cy = max(0.0, min(1.0, cy))
+                            w = max(0.01, min(1.0, w))
+                            h = max(0.01, min(1.0, h))
+                            x1 = max(0, int((cx - w / 2.0) * img_w))
+                            y1 = max(0, int((cy - h / 2.0) * img_h))
+                            x2 = min(img_w, int((cx + w / 2.0) * img_w))
+                            y2 = min(img_h, int((cy + h / 2.0) * img_h))
+                            proposals.append(
+                                BBoxProposal(
+                                    cx=cx, cy=cy, w=w, h=h,
+                                    confidence=score,
+                                    class_id=1,
+                                    label="top_query_lesion",
+                                    x1=x1, y1=y1, x2=x2, y2=y2,
+                                )
+                            )
+
+            # 2. Tensor format (fallback / stub format [1, N, 5])
+            elif isinstance(outputs, torch.Tensor):
                 raw_predictions = outputs[0].detach().cpu().numpy()
                 for row in raw_predictions:
                     cx, cy, w, h, score = float(row[0]), float(row[1]), float(row[2]), float(row[3]), float(row[4])
                     if score >= c_thresh:
-                        # Bounding box limits in pixel space
                         x1 = max(0, int((cx - w / 2.0) * img_w))
                         y1 = max(0, int((cy - h / 2.0) * img_h))
                         x2 = min(img_w, int((cx + w / 2.0) * img_w))

@@ -13,6 +13,13 @@ from .base import (
     RuntimeBackend,
 )
 
+from .model_wrappers import (
+    FOCALNET_CHECKPOINT_PATH,
+    FOCALNET_CONFIG_PATH,
+    FocalNetDINOWrapper,
+    MMBCDWrapper,
+)
+
 __all__ = [
     "BaseInferenceModel",
     "BBoxProposal",
@@ -22,4 +29,8 @@ __all__ = [
     "ModelType",
     "PreprocessedDICOMResult",
     "RuntimeBackend",
+    "FOCALNET_CHECKPOINT_PATH",
+    "FOCALNET_CONFIG_PATH",
+    "FocalNetDINOWrapper",
+    "MMBCDWrapper",
 ]

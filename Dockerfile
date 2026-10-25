@@ -1,63 +1,56 @@
+# syntax=docker/dockerfile:1
 # ==============================================================================
 # Production Dockerfile for MMBCD Healthcare Inference Service
-# Base Image: Official PyTorch 2.1.2 with CUDA 11.8 & cuDNN 8 runtime
+# Base Image: Python 3.10 slim
 # ==============================================================================
 
-FROM pytorch/pytorch:2.1.2-cuda11.8-cudnn8-runtime
+FROM python:3.10-slim
 
 LABEL maintainer="Principal AI Infrastructure Architect"
 LABEL description="Production Django service for Mammogram Cancer Detection using FocalNet-DINO & MMBCD"
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
+# Optimize Python: prevent writing bytecode and force unbuffered output
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
     PORT=8000 \
     DJANGO_SETTINGS_MODULE=mmbcd_service.settings
 
-# Install system dependencies (OpenCV, DICOM rendering, healthcheck curl)
+# Install system dependencies (OpenCV / DICOM rendering & healthcheck probes)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
     libgl1 \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
+    build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create application directory
+# Set working directory
 WORKDIR /app
 
 # Create non-root application user for healthcare HIPAA / security compliance
 RUN useradd -m -u 1000 appuser && \
-    mkdir -p /app/logs /app/weights/focalnet /app/weights/mmbcd /app/test_samples && \
+    mkdir -p /app/logs /app/weights /app/test_samples && \
     chown -R appuser:appuser /app
 
-# Copy dependency manifest and install wheels
+# Copy dependency manifest and install dependencies with cache mount
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install -r requirements.txt
 
-# Copy application codebase
+# Copy application codebase (weights/ and test_samples/ excluded via .dockerignore)
 COPY --chown=appuser:appuser . /app/
 
 # Switch to non-root user
 USER appuser
 
-# Expose HTTP port
+# Expose HTTP port 8000
 EXPOSE 8000
 
-# Container Healthcheck verifying service liveness and GPU readiness
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+# Container Healthcheck verifying service liveness
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health/ || exit 1
 
-# Production WSGI server command (1 worker, 4 threads to prevent GPU VRAM concurrency conflicts)
-CMD ["gunicorn", "mmbcd_service.wsgi:application", \
-     "--bind", "0.0.0.0:8000", \
-     "--workers", "1", \
-     "--threads", "4", \
-     "--timeout", "300", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-"]
+# Production WSGI server command using Gunicorn
+CMD ["gunicorn", "mmbcd_service.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
