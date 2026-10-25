@@ -22,6 +22,20 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() in ("true", "1", "yes")
 
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
 
+# Deep Learning Model & Checkpoint Configurations
+FOCALNET_CHECKPOINT_PATH = os.environ.get(
+    "FOCALNET_CHECKPOINT_PATH",
+    str(BASE_DIR / "weights" / "focalnet" / "checkpoint0031.pth"),
+)
+FOCALNET_CONFIG_PATH = os.environ.get(
+    "FOCALNET_CONFIG_PATH",
+    str(BASE_DIR / "weights" / "focalnet" / "config_cfg.py"),
+)
+MMBCD_CHECKPOINT_PATH = os.environ.get(
+    "MMBCD_CHECKPOINT_PATH",
+    str(BASE_DIR / "weights" / "mmbcd" / "mmbcd_best.pth"),
+)
+
 # Application definition
 INSTALLED_APPS = [
     "django.contrib.admin",

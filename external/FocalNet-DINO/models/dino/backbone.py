@@ -235,17 +235,20 @@ def build_backbone(args):
             'focalnet_H_224_22k_fl4': 'focalnet_huge_lrf_224_fl4.pth', 
         }
         pretrainedpath = os.path.join(pretrained_dir, PTDICT[args.backbone])
-        checkpoint = torch.load(pretrainedpath, map_location='cpu')['model']
-        from collections import OrderedDict
-        def key_select_function(keyname):
-            if 'head' in keyname:
-                return False
-            if args.dilation and 'layers.3' in keyname:
-                return False
-            return True        
-        _tmp_st = OrderedDict({k:v for k, v in clean_state_dict(checkpoint).items() if key_select_function(k)})
-        _tmp_st_output = backbone.load_state_dict(_tmp_st, strict=False)
-        print(str(_tmp_st_output))
+        if os.path.isfile(pretrainedpath):
+            checkpoint = torch.load(pretrainedpath, map_location='cpu', weights_only=False)['model']
+            from collections import OrderedDict
+            def key_select_function(keyname):
+                if 'head' in keyname:
+                    return False
+                if args.dilation and 'layers.3' in keyname:
+                    return False
+                return True        
+            _tmp_st = OrderedDict({k:v for k, v in clean_state_dict(checkpoint).items() if key_select_function(k)})
+            _tmp_st_output = backbone.load_state_dict(_tmp_st, strict=False)
+            print(str(_tmp_st_output))
+        else:
+            print(f"Standalone backbone checkpoint {pretrainedpath} not found; proceeding with uninitialized backbone (complete weights loaded from downstream checkpoint).")
         bb_num_channels = backbone.num_features[4 - len(return_interm_indices):]   
     elif args.backbone in ['convnext_xlarge_22k']:
         backbone = build_convnext(modelname=args.backbone, pretrained=True, out_indices=tuple(return_interm_indices),backbone_dir=args.backbone_dir)

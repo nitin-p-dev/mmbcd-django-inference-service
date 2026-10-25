@@ -1,7 +1,7 @@
 # ==========================================================
 # Modified from mmcv
 # ==========================================================
-import os, sys
+import os, sys, time
 import os.path as osp
 import ast
 import tempfile
@@ -80,11 +80,9 @@ class SLConfig(object):
         check_file_exist(filename)
         if filename.lower().endswith('.py'):
             with tempfile.TemporaryDirectory() as temp_config_dir:
-                temp_config_file = tempfile.NamedTemporaryFile(
-                    dir=temp_config_dir, suffix='.py')
-                temp_config_name = osp.basename(temp_config_file.name)
-                shutil.copyfile(filename,
-                                osp.join(temp_config_dir, temp_config_name))
+                temp_config_name = f"temp_cfg_{os.getpid()}_{int(time.time()*1000)%100000}.py"
+                dest_path = osp.join(temp_config_dir, temp_config_name)
+                shutil.copyfile(filename, dest_path)
                 temp_module_name = osp.splitext(temp_config_name)[0]
                 sys.path.insert(0, temp_config_dir)
                 SLConfig._validate_py_syntax(filename)
@@ -97,8 +95,6 @@ class SLConfig(object):
                 }
                 # delete imported module
                 del sys.modules[temp_module_name]
-                # close temp file
-                temp_config_file.close()
         elif filename.lower().endswith(('.yml', '.yaml', '.json')):
             from .slio import slload
             cfg_dict = slload(filename)
