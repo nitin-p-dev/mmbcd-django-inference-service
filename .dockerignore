@@ -1,0 +1,39 @@
+# Git & Documentation
+.git
+.gitignore
+README.md
+
+# Virtual Environments
+venv/
+env/
+.venv/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Heavy Assets & Weights (Mounted via Docker volumes)
+weights/
+*.pth
+*.pt
+*.bin
+*.onnx
+
+# DICOM & Test Samples (Mounted via Docker volumes)
+test_samples/
+
+# Runtime Logs & Databases
+logs/
+*.log
+db.sqlite3
+
+# IDE & OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
